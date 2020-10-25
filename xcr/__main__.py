@@ -6,15 +6,18 @@ import operator
 
 from . import XCRFile, log
 
+def autoMMap(file,):
+	return mmap.mmap(file.fileno(), length=0, access=mmap.ACCESS_WRITE if file.writable() else mmap.ACCESS_READ,)
+
 def index(args,):
-	with open(args.File, 'rb',) as f, XCRFile(f, args.entry_limit,) as theFile:
+	with open(args.File, 'rb',) as file, autoMMap(file,) as mm, XCRFile(mm, args.entry_limit,) as theFile:
 		# fsck
 		for x in theFile:
 			pass
 		print(theFile)
 
 def extract(args,):
-	with open(args.File, 'rb',) as f, XCRFile(f, args.entry_limit,) as theFile:
+	with open(args.File, 'rb',) as file, autoMMap(file,) as mm, XCRFile(mm, args.entry_limit,) as theFile:
 		if args.out != '-':
 			raise TypeError("""Not yet implemented.""")
 		sys.stdout.buffer.write(theFile._mm[args.offset : args.offset + args.length])
