@@ -3,6 +3,7 @@ import mmap, os
 import struct
 from collections import namedtuple
 import operator
+import zlib
 """
 coding style:
 1. re("[^(,]\)",) should match generators only.
@@ -22,6 +23,13 @@ class Entry():
 		self.zeroX = zeroX
 		self.xcrfile = xcrfile
 		self.index = i
+		# compacting
+		if all(elem == 0 for elem in self.fileName1):
+			self.fileName1 = b''
+		if all(elem == 0 for elem in self.directoryName1):
+			self.directoryName1 = b''
+		if all(elem == 0 for elem in self.zeroX):
+			self.zeroX = b''
 	def updateXCRFAT(self,):
 		# pucgenie: Why is there no error message about undefined _mm, XCRFile, calcEntryOffset, ...?
 		Entry.struct_entry.pack_into(self.xcrfile._mm, XCRFile.calcEntryOffset(self.index,), self.fileName, self.directoryName,
@@ -33,6 +41,18 @@ class Entry():
 			self.directoryName,)}, 'offset': {repr(
 			self.offset,)}, 'length': {repr(
 			self.length,)},}}"""
+	def dumpUnknownData(self, folder,):
+		for thing in ['fileName1', 'directoryName1', 'zeroX',]:
+			theThing = getattr(self, thing)
+			theHash = zlib.crc32(theThing,) & 0xffffffff
+			outFileName = f"{folder}/{theHash:x}"
+			if os.path.exists(outFileName,):
+				continue
+			with open(outFileName, 'wb',) as f:
+				f.write(theThing,)
+	def clear_unallocated_metadata(self,):
+		self.fileName1 = b''
+		self.directoryName1 = b''
 	
 	@staticmethod
 	def unpack_entry_from_XCRFAT(xcrfile, i,):
@@ -66,12 +86,12 @@ class XCRFile():
 			if all(elem == 0 for elem in self._mm[firstEntry.offset : XCRFile.calcEntryOffset(len(self,),)]):
 				pass
 			else:
-				log.warn("""Unsupported "hidden" data area between XCRFAT and first data segment detected!""",)
+				log.warning("""Unsupported "hidden" data area between XCRFAT and first data segment detected!""",)
 		elif ueber < 0:
 			log.error("""Archive is - most likely - damaged! Partly unsupported but reserved areas seem to be used by data segments."""
 				,)
 		if self._mm.size() > self.file_length:
-			log.warn(f"""Please check Archive Length {self.file_length} vs. File Size {self._mm.size()}, XCRFAT size {
+			log.warning(f"""Please check Archive Length {self.file_length} vs. File Size {self._mm.size()}, XCRFAT size {
 				len(self,) * Entry.struct_entry.size} ...""",)
 		self._entries_initialized = True
 	def __len__(self,):
@@ -146,6 +166,10 @@ class XCRFile():
 				return False
 		return True
 	def __repr__(self,):
+		if not self._entries_initialized:
+			for x in self:
+				# just de-lazily load every entry.
+				pass
 		return f"{{'magic': {repr(self.magic,)}, 'file_length': {self.file_length}, 'entries': {repr(self._entries,)},}}"
 	
 	@staticmethod

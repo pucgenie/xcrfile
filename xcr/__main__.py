@@ -11,10 +11,21 @@ def autoMMap(file,):
 
 def index(args,):
 	with open(args.File, 'rb',) as file, autoMMap(file,) as mm, XCRFile(mm, args.entry_limit,) as theFile:
-		# fsck
-		for x in theFile:
-			pass
-		print(theFile)
+		if args.showUnknown or args.dumpUnknown:
+			log.info("""Going to show unknown data on STDERR.""",)
+			log.warning(f"bytes after magic: {theFile.magic1}",)
+			for x in theFile:
+				if x.fileName1 != b'':
+					log.warning(f"bytes after fileName: {x.fileName1}",)
+				if x.directoryName1 != b'':
+					log.warning(f"bytes after directoryName: {x.directoryName1}",)
+				if x.zeroX != b'':
+					log.warning(f"bytes padding end of entry: {x.zeroX}",)
+				if args.dumpUnknown:
+					x.dumpUnknownData(args.out)
+		if not args.skipPayload:
+			log.info("""Going to show known data.""",)
+			print(repr(theFile))
 
 def extract(args,):
 	with open(args.File, 'rb',) as file, autoMMap(file,) as mm, XCRFile(mm, args.entry_limit,) as theFile:
@@ -36,6 +47,11 @@ def replace(args,):
 		log.info(f"Wrote {args.length} bytes.")
 		mm.flush()
 
+def zerofree(args,):
+	with open(args.File, 'r+b',) as file, autoMMap(file,) as mm, XCRFile(mm, args.entry_limit,) as theFile:
+		for x in theFile:
+			#x.clear_unallocated_metadata()
+			x.updateXCRFAT()
 
 def compare(args,):
 	with open(args.File, 'rb') as f, open(args.in1, 'rb') as cmpData:
@@ -62,10 +78,12 @@ if __name__=="__main__":
 	parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
 	parser.add_argument("--loglevel", help="""What operation to perform on the file.""", default='DEBUG',)
 	parser.add_argument("File", help="""File that should be edited.""", default='-',)
-	parser.add_argument("--inplace", help="""Write changes to original file.""", action='store_true', default=True,)
+	parser.add_argument("--showUnknown", help="""Log unknown data.""", action='store_true', default=False,)
+	parser.add_argument("--dumpUnknown", help="""Save unknown data to files.""", action='store_true', default=False,)
+	parser.add_argument("--skipPayload", help="""Don't output data (Operation index).""", action='store_true', default=False,)
 	parser.add_argument("--out", help="""Where to write single item data to. '-' for STDOUT.""", default='-',)
 	parser.add_argument("--in1", help="""Where to take data from that should replace an existing entry.""",)
-	parser.add_argument("Operation", help="""What operation to perform on the file.""", choices=['index', 'extract', 'replace', 'compare', 'detailsOfOffset',],)
+	parser.add_argument("Operation", help="""What operation to perform on the file.""", choices=['index', 'extract', 'replace', 'compare', 'detailsOfOffset', 'zerofree',],)
 	parser.add_argument("--offset", type=auto_int, help="""Offset to use for single item, if not using paths and filenames.""",)
 	parser.add_argument("--length", type=auto_int, help="""Size for the single item, if not using paths and filenames.""",)
 	parser.add_argument("--entry_limit", type=auto_int, help="""Refuse from scanning files with more than {{entry_limit}} entries. Guard against DoS attacks.""", default=0x00010000,)
